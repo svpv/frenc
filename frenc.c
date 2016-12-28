@@ -34,10 +34,15 @@ int frenc(char *v[], int n, char **enc)
     assert(n > 0);
     // first pass, compute the total size
     size_t total = strlen(v[0]) + 1;
+    // preprocessing, improves speed but takes more memory
+    int *pplen = malloc(n * sizeof(int));
+    if (pplen == NULL)
+	return -2;
     size_t olen = 0;
     for (int i = 1; i < n; i++) {
 	size_t len = lcp(v[i-1], v[i]);
 	assert(len <= INT_MAX);
+	pplen[i] = len;
 	int diff = (int) len - (int) olen;
 	if (diff >= DIFF1_LO && diff <= DIFF1_HI)
 	    total += 1;
@@ -60,17 +65,21 @@ int frenc(char *v[], int n, char **enc)
 	olen = len;
     }
     assert(total <= INT_MAX);
-    if (enc == NULL)
+    if (enc == NULL) {
+	free(pplen);
 	return total - 1;
+    }
     // second pass, build the output
     char *out = malloc(total);
-    if (out == NULL)
+    if (out == NULL) {
+	free(pplen);
 	return -2;
+    }
     char *out0 = *enc = out;
     out = stpcpy(out, v[0]) + 1;
     olen = 0;
     for (int i = 1; i < n; i++) {
-	size_t len = lcp(v[i-1], v[i]);
+	size_t len = pplen[i];
 	int diff = (int) len - (int) olen;
 	if (diff >= DIFF1_LO && diff <= DIFF1_HI)
 	    *out++ = diff;
@@ -109,6 +118,7 @@ int frenc(char *v[], int n, char **enc)
 	out = stpcpy(out, v[i] + len) + 1;
 	olen = len;
     }
+    free(pplen);
     assert(out - out0 == (int) total);
     return total - 1;
 }
