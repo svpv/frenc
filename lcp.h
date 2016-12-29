@@ -12,16 +12,40 @@ static size_t lcp(const char *s1, size_t len1,
     size_t minlen = len1 < len2 ? len1 : len2;
     size_t xmmsize = minlen / 16;
     size_t xmmleft = minlen % 16;
-    for (size_t i = 0; i < xmmsize; i++) {
-	__m128i xmm1 = _mm_loadu_si128((__m128i *) s1);
-	__m128i xmm2 = _mm_loadu_si128((__m128i *) s2);
+    __m128i xmm1, xmm2;
+    unsigned short mask;
+    if (xmmsize % 2) {
+	xmm1 = _mm_loadu_si128((__m128i *) s1);
+	xmm2 = _mm_loadu_si128((__m128i *) s2);
 	xmm1 = _mm_cmpeq_epi8(xmm1, xmm2);
-	unsigned mask = _mm_movemask_epi8(xmm1);
+	mask = _mm_movemask_epi8(xmm1);
 	if (mask != 0xffff) {
 	    s1 += ffs(~mask) - 1;
 	    return s1 - s0;
 	}
 	s1 += 16, s2 += 16;
+	xmmsize--;
+    }
+    while (xmmsize) {
+	xmm1 = _mm_loadu_si128((__m128i *) s1);
+	xmm2 = _mm_loadu_si128((__m128i *) s2);
+	xmm1 = _mm_cmpeq_epi8(xmm1, xmm2);
+	mask = _mm_movemask_epi8(xmm1);
+	if (mask != 0xffff) {
+	    s1 += ffs(~mask) - 1;
+	    return s1 - s0;
+	}
+	s1 += 16, s2 += 16;
+	xmm1 = _mm_loadu_si128((__m128i *) s1);
+	xmm2 = _mm_loadu_si128((__m128i *) s2);
+	xmm1 = _mm_cmpeq_epi8(xmm1, xmm2);
+	mask = _mm_movemask_epi8(xmm1);
+	if (mask != 0xffff) {
+	    s1 += ffs(~mask) - 1;
+	    return s1 - s0;
+	}
+	s1 += 16, s2 += 16;
+	xmmsize -= 2;
     }
 #if 1
     // this code which handles the remaining bytes is tricky; one way
