@@ -31,18 +31,22 @@ static inline unsigned enc12(size_t n)
 
 // Yet another good thing about this encoding is that it is reversible -
 // size hints can actually be decoded into the rounded-up numbers,
-// with the average overhead below 0.3%.
-static inline size_t dec12(unsigned h)
+// with the average overhead below 0.3%.  It also makes sense to provide
+// the minimum possible value, e.g. to check whether the data was truncated.
+static inline void dec12(unsigned h, size_t *minp, size_t *maxp)
 {
     // denormal
-    if (h <= 256)
-	return h;
+    if (h <= 256) {
+	*minp = *maxp = h;
+	return;
+    }
     // 7-bit mantissa with the implicit high bit set
     size_t n = ((h &  0177) + 128);
     // the exponent, off by one
     size_t e = ((h & ~0177) >> 07) - 1;
     // now, is this result valid?
-    return n << e;
+    *minp = ((n - 1) << e) + 1;
+    *maxp = ((n - 0) << e);
 }
 
 // So the result is always valid when a hint is decoded into a 64-bit size_t.
