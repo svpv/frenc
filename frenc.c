@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
@@ -21,7 +22,7 @@
 #define DIFF3_LO (DIFF2_LO-1-32768)
 #define DIFF3_HI (DIFF2_HI+1+32767)
 
-int frenc(char *v[], int n, char **enc)
+size_t frenc(char **v, size_t n, void **encp)
 {
     assert(n > 0);
     // first pass, compute the total size
@@ -30,12 +31,15 @@ int frenc(char *v[], int n, char **enc)
     // preprocessing, improves speed but takes more memory
     int *pplen = malloc(n * sizeof(int));
     if (pplen == NULL)
-	return -2;
+	return FRENC_ERR_MALLOC;
     size_t olen = 0;
-    for (int i = 1; i < n; i++) {
+    for (size_t i = 1; i < n; i++) {
 	size_t len2 = strlen(v[i]);
 	size_t len = lcp(v[i-1], len1, v[i], len2);
-	assert(len <= INT_MAX);
+	if (len > INT_MAX) {
+	    free(pplen);
+	    return FRENC_ERR_RANGE;
+	}
 	pplen[i] = len;
 	int diff = (int) len - (int) olen;
 	if (diff >= DIFF1_LO && diff <= DIFF1_HI)
@@ -51,7 +55,7 @@ int frenc(char *v[], int n, char **enc)
 	    else if (diff < DIFF3_LO) {
 		// don't know that to do: to keep the encoding reversible,
 		// we MUST be able to restore the prefix, but currently we can't
-		return -1;
+		return FRENC_ERR_RANGE;
 	    }
 	    total += 3;
 	}
@@ -59,21 +63,20 @@ int frenc(char *v[], int n, char **enc)
 	olen = len;
 	len1 = len2;
     }
-    assert(total <= INT_MAX);
-    if (enc == NULL) {
+    if (encp == NULL) {
 	free(pplen);
-	return total - 1;
+	return total;
     }
     // second pass, build the output
     char *out = malloc(total);
     if (out == NULL) {
 	free(pplen);
-	return -2;
+	return FRENC_ERR_MALLOC;
     }
-    char *out0 = *enc = out;
+    char *out0 = *encp = out;
     out = stpcpy(out, v[0]) + 1;
     olen = 0;
-    for (int i = 1; i < n; i++) {
+    for (size_t i = 1; i < n; i++) {
 	size_t len = pplen[i];
 	int diff = (int) len - (int) olen;
 	if (diff >= DIFF1_LO && diff <= DIFF1_HI)
@@ -114,8 +117,8 @@ int frenc(char *v[], int n, char **enc)
 	olen = len;
     }
     free(pplen);
-    assert(out - out0 == (int) total);
-    return total - 1;
+    assert(out - out0 == (ptrdiff_t) total);
+    return total;
 }
 
 static const bool bigdiff[256] = {
@@ -137,13 +140,14 @@ static const bool bigdiff[256] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 
-int frdec(const char *enc, int enclen, char ***v)
+size_t frdec(const void *enc0, size_t encsize, char ***vp)
 {
-    assert(enclen >= 0);
-    assert(enc[enclen] == '\0');
+    assert(encsize > 0);
+    const char *enc = enc0;
+    if (enc[encsize-1] != '\0')
+	return FRENC_ERR_DATA;
     // first pass, compute n and the total size
-    const char *enc0 = enc;
-    const char *end = enc + enclen;
+    const char *end = enc + encsize;
     size_t n = 1;
     size_t len = strlen(enc);
     enc += len + 1;
@@ -156,18 +160,18 @@ int frdec(const char *enc, int enclen, char ***v)
 	    int left = end - enc;
 	    if (diff == 127) {
 		if (left < 1)
-		    return -1;
+		    return FRENC_ERR_DATA;
 		diff += (unsigned char) *enc++;
 	    }
 	    else if (diff == -127) {
 		if (left < 1)
-		    return -1;
+		    return FRENC_ERR_DATA;
 		diff -= (unsigned char) *enc++;
 	    }
 	    else {
 		assert(diff == -128);
 		if (left < 2)
-		    return -2;
+		    return FRENC_ERR_DATA;
 		union { short s16; unsigned short u16; } u;
 		memcpy(&u, enc, 2);
 		enc += 2;
@@ -188,12 +192,10 @@ int frdec(const char *enc, int enclen, char ***v)
 	enc += len + 1;
 	total += len + 1 + sizeof(char *);
     }
-    assert(n <= INT_MAX);
-    assert(total <= INT_MAX);
-    if (v == NULL)
+    if (vp == NULL)
 	return n;
     // second pass, build the output
-    char **strv = *v = malloc(total);
+    char **strv = *vp = malloc(total);
     char *strtab = (char *) (strv + n + 1);
     char *ostrtab = strtab;
     *strv++ = strtab;
@@ -206,19 +208,19 @@ int frdec(const char *enc, int enclen, char ***v)
 	if (bigdiff[(unsigned char) diff]) {
 	    int left = end - enc;
 	    if (diff == 127) {
-		if (left < 1)
-		    return -1;
+		if (left < 2)
+		    return FRENC_ERR_DATA;
 		diff += (unsigned char) *enc++;
 	    }
 	    else if (diff == -127) {
-		if (left < 1)
-		    return -1;
+		if (left < 2)
+		    return FRENC_ERR_DATA;
 		diff -= (unsigned char) *enc++;
 	    }
 	    else {
 		assert(diff == -128);
-		if (left < 2)
-		    return -2;
+		if (left < 3)
+		    return FRENC_ERR_DATA;
 		union { short s16; unsigned short u16; } u;
 		memcpy(&u, enc, 2);
 		enc += 2;
@@ -229,6 +231,8 @@ int frdec(const char *enc, int enclen, char ***v)
 		    diff = u.s16 - (DIFF2_LO-1);
 	    }
 	}
+	else if (enc == end)
+	    return FRENC_ERR_DATA;
 	// prefix
 	len = olen + diff;
 	olen = len;
@@ -240,7 +244,7 @@ int frdec(const char *enc, int enclen, char ***v)
 	enc += len + 1;
 	strtab += len + 1;
     }
-    assert(strtab - (char *) *v == (int) total);
+    assert(strtab - (char *) *vp == (ptrdiff_t) total);
     *strv = NULL;
     return n;
 }

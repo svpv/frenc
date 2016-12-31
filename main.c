@@ -35,7 +35,7 @@ usage:	fprintf(stderr, "Usage: %s [-d] [file]\n", progname);
 	    return 1;
 	}
     }
-    int n = 0;
+    size_t n = 0;
     char **v = NULL;
     // decode
     if (dec) {
@@ -53,14 +53,14 @@ usage:	fprintf(stderr, "Usage: %s [-d] [file]\n", progname);
 empty:	    fprintf(stderr, "%s: empty input\n", progname);
 	    return 1;
 	}
-	n = frdec(buf, size - 1, &v);
+	n = frdec(buf, size, &v);
 	free(buf);
-	if (n < 0) {
+	if (n >= FRENC_ERROR) {
 	    fprintf(stderr, "%s: frdec failed\n", progname);
 	    return 1;
 	}
 	assert(v);
-	for (int i = 0; i < n; i++)
+	for (size_t i = 0; i < n; i++)
 	    puts(v[i]);
 	return 0;
     }
@@ -80,13 +80,13 @@ empty:	    fprintf(stderr, "%s: empty input\n", progname);
     }
     if (n == 0)
 	goto empty;
-    char *enc;
-    int enclen = frenc(v, n, &enc);
-    if (enclen < 0) {
+    void *enc;
+    size_t size = frenc(v, n, &enc);
+    if (size >= FRENC_ERROR) {
 	fprintf(stderr, "%s: frenc failed\n", progname);
 	return 1;
     }
-    fwrite(enc, enclen + 1, 1, stdout);
+    fwrite(enc, size, 1, stdout);
     free(enc);
     return 0;
 }
