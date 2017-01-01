@@ -1,2 +1,2 @@
 CFLAGS = -g -O2 -Wall -Wextra
-frenc: frenc.c main.c
+frenc: frenc.c frdec.c main.c
