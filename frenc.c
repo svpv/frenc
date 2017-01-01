@@ -5,22 +5,9 @@
 #include <assert.h>
 #include <limits.h>
 #include <endian.h>
+#define FRENC_FORMAT
 #include "frenc.h"
 #include "lcp.h"
-
-// 1-byte diff encodes [-126,126]
-#define DIFF1_LO (-126)
-#define DIFF1_HI (+126)
-
-// if the first byte is -127 or 127, the second byte is read
-// as unsigned addend with the sign assumed from the first byte
-#define DIFF2_LO (-127-255)
-#define DIFF2_HI (+127+255)
-
-// if the first byte -128, two more bytes are read to define
-// the range outside of [DIFF2_LO,DIFF2_HI]
-#define DIFF3_LO (DIFF2_LO-1-32768)
-#define DIFF3_HI (DIFF2_HI+1+32767)
 
 // It is hard to estimate the encoded size from n only.  Therefore,
 // the encoding is done in two passes: on the first pass, the encoded

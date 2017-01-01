@@ -63,4 +63,53 @@ size_t frencio(FILE *in, FILE *out, bool z);
 size_t frdecio(FILE *in, FILE *out, bool z);
 #endif
 
+// Some details on the encoding format.
+#ifdef FRENC_FORMAT
+
+// The first encoded entry is
+//
+//	b1 b2 b3 str '\0'
+//
+// Bytes b1 through b3 provide a special malloc hint which makes it
+// possible for frdec to decode in a single pass with a single malloc
+// call.  When all three bytes are zero (this happens when frencio
+// writes to a pipe), frdec performs two passes.  Then goes the first
+// input string, as is, followed by a terminating '\0' byte.
+//
+// Then follow zero or more entries of the form
+//
+//	b1 [ b2 | b2 b3 ] suf '\0'
+//
+// The first byte b1, possibly followed by one more byte b2 or two more
+// bytes b2 and b3, encodes the length of the common prefix between
+// this entry and the previous entry.  The encoding is differential:
+// if b1=0, the prefix does not change; b1 < 0 implies that the prefix
+// becomes shorter (i.e. fewer bytes need to be copied from the
+// beginning of the previous string), and otherwise the prefix becomes
+// longer.  Following is a null-terminated suffix.  The original input
+// string is restored by concatenating the prefix with the suffix.
+
+// 1-byte diff encodes the range [-126,126].
+#define DIFF1_LO (-126)
+#define DIFF1_HI (+126)
+
+// If the first byte is -127 or 127, the second byte is read as
+// an unsigned addend with the sign assumed from the first byte.
+#define DIFF2_LO (-127-255)
+#define DIFF2_HI (+127+255)
+
+// If the first byte -128, a signed little-endian short integer
+// is read to define the range outside of [DIFF2_LO,DIFF2_HI].
+#define DIFF3_LO (DIFF2_LO-1-32767)
+#define DIFF3_HI (DIFF2_HI+1+32767)
+
+// If diff > DIFF3_HI, the diff is truncated to DIFF3_HI, which
+// results in a longer suffix and thus in redundant (inefficient)
+// encoding.  However, if diff < DIFF3_LO, there MUST be a way to go
+// back and reset the prefix, just to keep the encoding reversible.
+// The special value -32768 bears just this meaning: it resets the
+// length of the common prefix to 0.
+
+#endif
+
 #endif
