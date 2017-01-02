@@ -78,6 +78,7 @@ static inline size_t encpass(char **v, size_t n, char *enc,
 	    if (pass == 1)
 		total += 3;
 	    else {
+		*enc++ = -128;
 		if (diff > 0) {
 		    diff -= DIFF2_HI+1;
 		    assert(diff <= 32767);
