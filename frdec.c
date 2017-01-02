@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
+#include <limits.h>
 #include <endian.h>
 #define FRENC_FORMAT
 #include "frenc.h"
@@ -44,7 +45,7 @@ static inline size_t decpass(const char *enc, const char *end,
 	strtab = stpcpy(strtab, enc) + 1;
 	enc += strtab - ostrtab;
     }
-    int olen = 0;
+    size_t olen = 0;
     while (enc < end) {
 	int diff = *enc++;
 	if (bigdiff[(unsigned char) diff]) {
@@ -78,7 +79,18 @@ static inline size_t decpass(const char *enc, const char *end,
 	if (pass == 1)
 	    n++;
 	// prefix
-	int len = olen + diff;
+	size_t len;
+	if (diff < 0) {
+	    size_t absdiff = -diff;
+	    if (absdiff > olen)
+		return FRENC_ERR_DATA;
+	    len = olen - absdiff;
+	}
+	else {
+	    len = olen + diff;
+	    if (len > INT_MAX)
+		return FRENC_ERR_DATA;
+	}
 	olen = len;
 	if (pass == 1)
 	    *strtab_size += len;
