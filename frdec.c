@@ -27,19 +27,25 @@ static const bool bigdiff[256] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 
+#define UNLIKELY(cond) __builtin_expect(cond, 0)
+
+#define CKBAD(cond)			\
+    do {				\
+	if (check && UNLIKELY(cond))	\
+	    return FRENC_ERR_DATA;	\
+    } while (0)
+
 #define APPLY_NEGATIVE_DIFF(diff)	\
     do {				\
 	size_t absdiff = -diff;		\
-	if (check && absdiff > olen)	\
-	    return FRENC_ERR_DATA;	\
+	CKBAD(absdiff > olen);		\
 	len = olen - absdiff;		\
     } while (0)
 
 #define APPLY_NONNEGATIVE_DIFF(diff)	\
     do {				\
 	len = olen + diff;		\
-	if (check && len > INT_MAX)	\
-	    return FRENC_ERR_DATA;	\
+	CKBAD(len > INT_MAX);		\
     } while (0)
 
 static inline size_t decpass(const char *enc, const char *end,
@@ -64,24 +70,21 @@ static inline size_t decpass(const char *enc, const char *end,
     while (enc < end) {
 	int diff = *enc++;
 	size_t len;
-	if (bigdiff[(unsigned char) diff]) {
+	if (UNLIKELY(bigdiff[(unsigned char) diff])) {
 	    int left = end - enc;
 	    if (diff == 127) {
-		if (check && left < 2)
-		    return FRENC_ERR_DATA;
+		CKBAD(left < 2);
 		diff += (unsigned char) *enc++;
 		APPLY_NONNEGATIVE_DIFF(diff);
 	    }
 	    else if (diff == -127) {
-		if (check && left < 2)
-		    return FRENC_ERR_DATA;
+		CKBAD(left < 2);
 		diff -= (unsigned char) *enc++;
 		APPLY_NEGATIVE_DIFF(diff);
 	    }
 	    else {
 		assert(diff == -128);
-		if (check && left < 3)
-		    return FRENC_ERR_DATA;
+		CKBAD(left < 3);
 		union { short s16; unsigned short u16; } u;
 		memcpy(&u, enc, 2);
 		enc += 2;
@@ -100,8 +103,7 @@ static inline size_t decpass(const char *enc, const char *end,
 	    }
 	}
 	else {
-	    if (check && enc == end)
-		return FRENC_ERR_DATA;
+	    CKBAD(enc == end);
 	    if (diff < 0)
 		APPLY_NEGATIVE_DIFF(diff);
 	    else
