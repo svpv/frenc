@@ -1,3 +1,6 @@
+#ifndef FRENC_LCP_H
+#define FRENC_LCP_H
+
 #ifdef __SSE2__
 #include <emmintrin.h>
 #include <strings.h>
@@ -226,3 +229,4 @@ static size_t lcp(const char *s1, size_t len1,
 	    s1++, s2++;
     return s1 - s0;
 }
+#endif

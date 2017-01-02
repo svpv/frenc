@@ -1,0 +1,8 @@
+AC_INIT([frenc], [0.2])
+AC_CONFIG_SRCDIR([frenc.h])
+
+AM_INIT_AUTOMAKE([foreign])
+AM_PROG_LIBTOOL
+
+AC_CONFIG_FILES([Makefile])
+AC_OUTPUT
