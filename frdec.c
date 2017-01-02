@@ -81,10 +81,14 @@ static inline size_t decpass(const char *enc, const char *end,
 	// prefix
 	size_t len;
 	if (diff < 0) {
-	    size_t absdiff = -diff;
-	    if (absdiff > olen)
-		return FRENC_ERR_DATA;
-	    len = olen - absdiff;
+	    if (diff < DIFF3_LO)
+		len = 0;
+	    else {
+		size_t absdiff = -diff;
+		if (absdiff > olen)
+		    return FRENC_ERR_DATA;
+		len = olen - absdiff;
+	    }
 	}
 	else {
 	    len = olen + diff;
