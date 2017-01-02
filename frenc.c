@@ -65,27 +65,34 @@ static inline size_t encpass(char **v, size_t n, char *enc,
 	    }
 	}
 	else {
-	    if (diff > DIFF3_HI) {
-		// this will result in inefficient encoding
-		diff = DIFF3_HI;
-		len = olen + diff;
-	    }
-	    else if (diff < DIFF3_LO) {
-		// don't know that to do: to keep the encoding reversible,
-		// we MUST be able to restore the prefix, but currently we can't
-		return FRENC_ERR_RANGE;
-	    }
-	    if (pass == 1)
+	    if (pass == 1) {
 		total += 3;
+		if (diff > DIFF3_HI)
+		    len = olen + DIFF3_HI;
+		else if (diff < DIFF3_LO)
+		    len = 0;
+	    }
 	    else {
 		*enc++ = -128;
 		if (diff > 0) {
-		    diff -= DIFF2_HI+1;
-		    assert(diff <= 32767);
+		    if (diff > DIFF3_HI) {
+			len = olen + DIFF3_HI;
+			diff = 32767;
+		    }
+		    else {
+			diff -= DIFF2_HI+1;
+			assert(diff <= 32767);
+		    }
 		}
 		else {
-		    diff -= DIFF2_LO-1;
-		    assert(diff >= -32768);
+		    if (diff < DIFF3_LO) {
+			len = 0;
+			diff = -32768;
+		    }
+		    else {
+			diff -= DIFF2_LO-1;
+			assert(diff >= -32767);
+		    }
 		}
 		union { short s16; unsigned short u16; } u = { diff };
 		u.u16 = htole16(u.u16);
