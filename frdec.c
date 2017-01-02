@@ -71,7 +71,7 @@ static inline size_t decpass(const char *enc, const char *end,
 		if (u.s16 >= 0)
 		    diff = u.s16 + (DIFF2_HI+1);
 		else
-		    diff = u.s16 - (DIFF2_LO-1);
+		    diff = u.s16 + (DIFF2_LO-1);
 	    }
 	}
 	else if (check && enc == end)
