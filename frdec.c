@@ -27,6 +27,21 @@ static const bool bigdiff[256] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 
+#define APPLY_NEGATIVE_DIFF(diff)	\
+    do {				\
+	size_t absdiff = -diff;		\
+	if (check && absdiff > olen)	\
+	    return FRENC_ERR_DATA;	\
+	len = olen - absdiff;		\
+    } while (0)
+
+#define APPLY_NONNEGATIVE_DIFF(diff)	\
+    do {				\
+	len = olen + diff;		\
+	if (check && len > INT_MAX)	\
+	    return FRENC_ERR_DATA;	\
+    } while (0)
+
 static inline size_t decpass(const char *enc, const char *end,
 			     char **v, char *strtab, size_t *strtab_size,
 			     int pass, bool check)
@@ -48,17 +63,20 @@ static inline size_t decpass(const char *enc, const char *end,
     size_t olen = 0;
     while (enc < end) {
 	int diff = *enc++;
+	size_t len;
 	if (bigdiff[(unsigned char) diff]) {
 	    int left = end - enc;
 	    if (diff == 127) {
 		if (check && left < 2)
 		    return FRENC_ERR_DATA;
 		diff += (unsigned char) *enc++;
+		APPLY_NONNEGATIVE_DIFF(diff);
 	    }
 	    else if (diff == -127) {
 		if (check && left < 2)
 		    return FRENC_ERR_DATA;
 		diff -= (unsigned char) *enc++;
+		APPLY_NEGATIVE_DIFF(diff);
 	    }
 	    else {
 		assert(diff == -128);
@@ -68,34 +86,31 @@ static inline size_t decpass(const char *enc, const char *end,
 		memcpy(&u, enc, 2);
 		enc += 2;
 		u.u16 = le16toh(u.u16);
-		if (u.s16 >= 0)
+		if (u.s16 >= 0) {
 		    diff = u.s16 + (DIFF2_HI+1);
-		else
+		    APPLY_NONNEGATIVE_DIFF(diff);
+		}
+		else {
 		    diff = u.s16 + (DIFF2_LO-1);
-	    }
-	}
-	else if (check && enc == end)
-	    return FRENC_ERR_DATA;
-	if (pass == 1)
-	    n++;
-	// prefix
-	size_t len;
-	if (diff < 0) {
-	    if (diff < DIFF3_LO)
-		len = 0;
-	    else {
-		size_t absdiff = -diff;
-		if (absdiff > olen)
-		    return FRENC_ERR_DATA;
-		len = olen - absdiff;
+		    if (diff < DIFF3_LO)
+			len = 0;
+		    else
+			APPLY_NEGATIVE_DIFF(diff);
+		}
 	    }
 	}
 	else {
-	    len = olen + diff;
-	    if (len > INT_MAX)
+	    if (check && enc == end)
 		return FRENC_ERR_DATA;
+	    if (diff < 0)
+		APPLY_NEGATIVE_DIFF(diff);
+	    else
+		APPLY_NONNEGATIVE_DIFF(diff);
 	}
 	olen = len;
+	if (pass == 1)
+	    n++;
+	// prefix
 	if (pass == 1)
 	    *strtab_size += len;
 	else {
