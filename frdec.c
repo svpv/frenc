@@ -26,37 +26,42 @@ static const bool bigdiff[256] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 
-size_t frdec(const void *enc0, size_t encsize, char ***vp)
+static inline size_t decpass(const char *enc, const char *end,
+			     char **v, char *strtab, size_t *strtab_size,
+			     int pass, bool check)
 {
-    assert(encsize > 0);
-    const char *enc = enc0;
-    if (enc[encsize-1] != '\0')
-	return FRENC_ERR_DATA;
-    // first pass, compute n and the total size
-    const char *end = enc + encsize;
-    size_t n = 1;
-    size_t len = strlen(enc);
-    enc += len + 1;
-    // additionally v[n] will have NULL sentinel
-    size_t total = len + 1 + 2 * sizeof(char *);
+    char **v0;
+    size_t n;
+    char *ostrtab;
+    if (pass == 1) {
+	n = 1;
+	*strtab_size = strlen(enc) + 1;
+	enc += *strtab_size;
+    }
+    else {
+	v0 = v;
+	*v++ = ostrtab = strtab;
+	strtab = stpcpy(strtab, enc) + 1;
+	enc += strtab - ostrtab;
+    }
     int olen = 0;
     while (enc < end) {
 	int diff = *enc++;
 	if (bigdiff[(unsigned char) diff]) {
 	    int left = end - enc;
 	    if (diff == 127) {
-		if (left < 1)
+		if (check && left < 2)
 		    return FRENC_ERR_DATA;
 		diff += (unsigned char) *enc++;
 	    }
 	    else if (diff == -127) {
-		if (left < 1)
+		if (check && left < 2)
 		    return FRENC_ERR_DATA;
 		diff -= (unsigned char) *enc++;
 	    }
 	    else {
 		assert(diff == -128);
-		if (left < 2)
+		if (check && left < 3)
 		    return FRENC_ERR_DATA;
 		union { short s16; unsigned short u16; } u;
 		memcpy(&u, enc, 2);
@@ -68,69 +73,57 @@ size_t frdec(const void *enc0, size_t encsize, char ***vp)
 		    diff = u.s16 - (DIFF2_LO-1);
 	    }
 	}
-	n++;
-	// prefix
-	len = olen + diff;
-	olen = len;
-	total += len;
-	// suffix
-	len = strlen(enc);
-	enc += len + 1;
-	total += len + 1 + sizeof(char *);
-    }
-    if (vp == NULL)
-	return n;
-    // second pass, build the output
-    char **strv = *vp = malloc(total);
-    char *strtab = (char *) (strv + n + 1);
-    char *ostrtab = strtab;
-    *strv++ = strtab;
-    enc = enc0;
-    strtab = stpcpy(strtab, enc) + 1;
-    enc += strtab - ostrtab;
-    olen = 0;
-    while (enc < end) {
-	int diff = *enc++;
-	if (bigdiff[(unsigned char) diff]) {
-	    int left = end - enc;
-	    if (diff == 127) {
-		if (left < 2)
-		    return FRENC_ERR_DATA;
-		diff += (unsigned char) *enc++;
-	    }
-	    else if (diff == -127) {
-		if (left < 2)
-		    return FRENC_ERR_DATA;
-		diff -= (unsigned char) *enc++;
-	    }
-	    else {
-		assert(diff == -128);
-		if (left < 3)
-		    return FRENC_ERR_DATA;
-		union { short s16; unsigned short u16; } u;
-		memcpy(&u, enc, 2);
-		enc += 2;
-		u.u16 = le16toh(u.u16);
-		if (u.s16 >= 0)
-		    diff = u.s16 + (DIFF2_HI+1);
-		else
-		    diff = u.s16 - (DIFF2_LO-1);
-	    }
-	}
-	else if (enc == end)
+	else if (check && enc == end)
 	    return FRENC_ERR_DATA;
+	if (pass == 1)
+	    n++;
 	// prefix
-	len = olen + diff;
+	int len = olen + diff;
 	olen = len;
-	*strv++ = memcpy(strtab, ostrtab, len);
-	ostrtab = strtab;
-	strtab += len;
+	if (pass == 1)
+	    *strtab_size += len;
+	else {
+	    *v++ = memcpy(strtab, ostrtab, len);
+	    ostrtab = strtab;
+	    strtab += len;
+	}
 	// suffix
-	len = stpcpy(strtab, enc) - strtab;
+	if (pass == 1) {
+	    len = strlen(enc);
+	    *strtab_size += len + 1;
+	}
+	else {
+	    len = stpcpy(strtab, enc) - strtab;
+	    strtab += len + 1;
+	}
 	enc += len + 1;
-	strtab += len + 1;
     }
-    assert(strtab - (char *) *vp == (ptrdiff_t) total);
-    *strv = NULL;
+    if (pass == 1)
+	return n;
+    *v = NULL;
+    return v - v0;
+}
+
+size_t frdec(const void *enc, size_t encsize, char ***vp)
+{
+    assert(encsize > 0);
+    assert(enc);
+    assert(vp);
+    const char *end = (char *) enc + encsize;
+    if (end[-1] != '\0')
+	return FRENC_ERR_DATA;
+    // first pass, compute n and the total size
+    size_t strtab_size;
+    size_t n = decpass(enc, end, NULL, NULL, &strtab_size, 1, 1);
+    if (n >= FRENC_ERROR)
+	return n;
+    size_t malloc_size = (n + 1) * sizeof(char *) + strtab_size;
+    char **v = malloc(malloc_size);
+    if (v == NULL)
+	return FRENC_ERR_MALLOC;
+    char *strtab = (char *) (v + n + 1);
+    // second pass, build the output
+    decpass(enc, end, v, strtab, &strtab_size, 2, 0);
+    *vp = v;
     return n;
 }
