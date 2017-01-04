@@ -49,7 +49,8 @@ static const bool bigdiff[256] = {
     } while (0)
 
 static inline size_t decpass(const char *enc, const char *end,
-			     char **v, char *strtab, size_t *strtab_size,
+			     char **v, unsigned *ll, bool hasll,
+			     char *strtab, size_t *strtab_size,
 			     int pass, bool check)
 {
     char **v0;
@@ -65,6 +66,8 @@ static inline size_t decpass(const char *enc, const char *end,
 	*v++ = ostrtab = strtab;
 	strtab = stpcpy(strtab, enc) + 1;
 	enc += strtab - ostrtab;
+	if (hasll)
+	    *ll++ = strtab - ostrtab - 1;
     }
     size_t olen = 0;
     while (enc < end) {
@@ -119,6 +122,8 @@ static inline size_t decpass(const char *enc, const char *end,
 	    *v++ = memcpy(strtab, ostrtab, len);
 	    ostrtab = strtab;
 	    strtab += len;
+	    if (hasll)
+		*ll = len;
 	}
 	// suffix
 	if (pass == 1) {
@@ -128,6 +133,8 @@ static inline size_t decpass(const char *enc, const char *end,
 	else {
 	    len = stpcpy(strtab, enc) - strtab;
 	    strtab += len + 1;
+	    if (hasll)
+		*ll++ += len;
 	}
 	enc += len + 1;
     }
@@ -137,7 +144,8 @@ static inline size_t decpass(const char *enc, const char *end,
     return v - v0;
 }
 
-size_t frdec(const void *enc, size_t encsize, char ***vp)
+static inline size_t frdecll(const void *enc, size_t encsize, char ***vp,
+			     unsigned **llp, bool hasllp)
 {
     assert(encsize > 0);
     assert(enc);
@@ -147,16 +155,30 @@ size_t frdec(const void *enc, size_t encsize, char ***vp)
 	return FRENC_ERR_DATA;
     // first pass, compute n and the total size
     size_t strtab_size;
-    size_t n = decpass(enc, end, NULL, NULL, &strtab_size, 1, 1);
+    size_t n = decpass(enc, end, NULL, NULL, 0, NULL, &strtab_size, 1, 1);
     if (n >= FRENC_ERROR)
 	return n;
-    size_t malloc_size = (n + 1) * sizeof(char *) + strtab_size;
+    size_t malloc_size = (n + 1) * sizeof(char *) + strtab_size +
+			 (hasllp ? n * sizeof *llp : 0);
     char **v = malloc(malloc_size);
     if (v == NULL)
 	return FRENC_ERR_MALLOC;
-    char *strtab = (char *) (v + n + 1);
+    unsigned *ll =  hasllp ? (void *) (v + n + 1) : NULL;
+    char *strtab = !hasllp ? (char *) (v + n + 1) : (char *) (ll + n);
     // second pass, build the output
-    decpass(enc, end, v, strtab, &strtab_size, 2, 0);
+    decpass(enc, end, v, ll, hasllp, strtab, &strtab_size, 2, 0);
     *vp = v;
+    if (hasllp)
+	*llp = ll;
     return n;
+}
+
+size_t frdec(const void *enc, size_t encsize, char ***vp)
+{
+    return frdecll(enc, encsize, vp, NULL, 0);
+}
+
+size_t frdecl(const void *enc, size_t encsize, char ***vp, unsigned **llp)
+{
+    return frdecll(enc, encsize, vp, llp, 1);
 }

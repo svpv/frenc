@@ -53,15 +53,18 @@ usage:	fprintf(stderr, "Usage: %s [-d] [file]\n", progname);
 empty:	    fprintf(stderr, "%s: empty input\n", progname);
 	    return 1;
 	}
-	n = frdec(buf, size, &v);
+	unsigned *lens;
+	n = frdecl(buf, size, &v, &lens);
 	free(buf);
 	if (n >= FRENC_ERROR) {
 	    fprintf(stderr, "%s: frdec failed\n", progname);
 	    return 1;
 	}
 	assert(v);
-	for (size_t i = 0; i < n; i++)
-	    puts(v[i]);
+	for (size_t i = 0; i < n; i++) {
+	    v[i][lens[i]] = '\n';
+	    fwrite(v[i], lens[i] + 1, 1, stdout);
+	}
 	return 0;
     }
     // encode

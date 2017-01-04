@@ -26,6 +26,12 @@ size_t frenc(char **v, size_t n, void **encp);
 // should free it after use.
 size_t frdec(const void *enc, size_t encsize, char ***vp);
 
+// Also returns the length of the strings, which makes it possible
+// to avoid the printf(3) penalty by replacing it with fwrite(3).
+// The lengths ll[] are allocated within the malloc chunk that is
+// return as v[]; the caller should free v[] and must not free ll[].
+size_t frdecl(const void *enc, size_t encsize, char ***vp, unsigned **llp);
+
 // The most obvious reason for an error is a malloc failure.
 #define FRENC_ERR_MALLOC (~(size_t)0-0)
 // There are also certain size limits: each string in v[] must be
