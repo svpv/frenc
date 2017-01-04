@@ -57,8 +57,7 @@ static inline size_t encpass(char **v, size_t n, char *enc,
 		}
 		else {
 		    *enc++ = -127;
-		    diff += 127;
-		    assert(diff <= 255);
+		    diff = -diff - 127;
 		}
 		unsigned char diff8 = diff;
 		memcpy(enc++, &diff8, 1);
